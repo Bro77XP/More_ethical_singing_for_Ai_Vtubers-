@@ -29,7 +29,7 @@ def extract_pitch(audio_path, sr=22050):
     f0, voiced_flag, voiced_probs = librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), hop_length=hop_length, sr=sr)
     return f0, voiced_flag, sr, hop_length
 
-def generate_ust(lyrics_segments, pitch_data, output_path, audio_duration):
+def generate_ust(lyrics_segments, pitch_data, output_path):
     f0, voiced_flag, sr, hop_length = pitch_data
     tempo = 120  # Default tempo
     # Sort segments by start time
@@ -58,16 +58,6 @@ Mode2=True
             segment['end'] -= first_start
     else:
         first_start = 0
-
-    # Calculate total segments duration and scale factor to match audio duration
-    total_segments_duration = lyrics_segments[-1]['end'] if lyrics_segments else 0
-    scale_factor = audio_duration / total_segments_duration if total_segments_duration > 0 else 1
-    print(f"Audio duration: {audio_duration:.2f}s, Segments duration: {total_segments_duration:.2f}s, Scale factor: {scale_factor:.2f}")
-
-    # Apply scale factor to segment times to match audio duration
-    for segment in lyrics_segments:
-        segment['start'] *= scale_factor
-        segment['end'] *= scale_factor
 
     note_index = 0
     previous_end = 0.0
@@ -141,9 +131,7 @@ Mode2=True
 
 def main():
     # Set to False to disable Genius lyric fetching and or you u justn wanna mess with this for fun <3
-    use_genius = False
-    # Set to True to use local lyrics from lyrics.txt instead of transcribed or Genius
-    use_local_lyrics = True
+    use_genius = True
 
     # Look for vocals.wav in the script's directory
     script_dir = Path(__file__).parent
@@ -154,21 +142,11 @@ def main():
     print(f"Exists: {audio_path.exists()}")
 
     if not audio_path.exists():
-        print(f"Audio file {audio_path} not found.")
+        print(f"Audio file {audio_file} not found.")
         return
 
     correct_words = []
-    if use_local_lyrics:
-        print("Using local lyrics from lyrics.txt...")
-        lyrics_file = script_dir / "lyrics.txt"
-        if lyrics_file.exists():
-            with open(lyrics_file, 'r', encoding='utf-8') as f:
-                lyrics_text = f.read()
-            correct_words = [word.strip() for word in lyrics_text.split() if word.strip()]
-            print(f"Loaded {len(correct_words)} words from lyrics.txt.")
-        else:
-            print("lyrics.txt not found. Using transcribed lyrics.")
-    elif use_genius:
+    if use_genius:
         print("Fetching lyrics from Genius...")
         genius_url = "https://genius.com/Mili-jpn-worldexecuteme-lyrics"
         correct_lyrics = fetch_lyrics_from_genius(genius_url)
@@ -178,7 +156,7 @@ def main():
         else:
             print("Failed to fetch lyrics from Genius.")
     else:
-        print("Using transcribed lyrics.")
+        print("Genius lyric fetching disabled.")
 
     print("Transcribing audio...")
     transcription = transcribe_audio(str(audio_path))
@@ -189,12 +167,8 @@ def main():
         else:
             lyrics_segments.append(segment)
 
-    print(f"Transcribed {len(lyrics_segments)} segments.")
-
     # Replace lyrics with correct ones if available
     if correct_words:
-        if len(correct_words) != len(lyrics_segments):
-            print(f"Warning: Number of words in lyrics ({len(correct_words)}) does not match number of transcribed segments ({len(lyrics_segments)}). Timing may be off.")
         for i, segment in enumerate(lyrics_segments):
             if i < len(correct_words):
                 segment['text'] = correct_words[i]
@@ -203,13 +177,9 @@ def main():
     print("Extracting pitch...")
     pitch_data = extract_pitch(str(audio_path))
 
-    # Get audio duration
-    y, sr = librosa.load(str(audio_path), sr=None)
-    audio_duration = len(y) / sr
-
     ust_file = audio_path.parent / (audio_path.stem + ".ust")
     print(f"Generating UST file: {ust_file}")
-    generate_ust(lyrics_segments, pitch_data, str(ust_file), audio_duration)
+    generate_ust(lyrics_segments, pitch_data, str(ust_file))
 
     print("Done! Open the UST file in OpenUTAU and render with DiffSinger.")
 

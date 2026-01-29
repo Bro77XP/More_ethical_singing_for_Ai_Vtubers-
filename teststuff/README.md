@@ -6,12 +6,13 @@ This Python script generates a UST (UTAU Sequence Text) file from a vocal audio 
 
 - **Audio Transcription**: Uses OpenAI Whisper to transcribe lyrics from the audio.
 - **Pitch Extraction**: Extracts fundamental frequency (pitch) from the audio.
-- **UST Generation**: Creates a UST file compatible with OpenUTAU and DiffSinger.
+- **UST Generatio n**: Creates a UST file compatible with OpenUTAU and DiffSinger.
 - **Pitch Constrained**: Pitch is constrained to the range F#3 (54) to A#4 (70) for vocal suitability.
 - **Timing Corrections**: Improved timing to avoid long initial silences and ensure accurate note lengths.
 - **Long Note Support**: Supports long notes in OpenUTAU via adjustable Length fields.
 - **Optional Lyric Fetching**: Can fetch accurate lyrics from Genius.com to replace transcribed lyrics.
 - **Disablable Genius Fetching**: Lyric fetching from Genius can be disabled by setting `use_genius = False`.
+- **Local Lyrics Support**: Can use lyrics from a local `lyrics.txt` file by setting `use_local_lyrics = True`.
 
 ## Requirements
 
@@ -54,6 +55,11 @@ pip install openai-whisper librosa numpy requests beautifulsoup4
 - **Disable Genius Lyric Fetching**:
   - In the script, change `use_genius = True` to `use_genius = False` in the `main()` function.
   - This will skip fetching lyrics from Genius.com and use only the transcribed lyrics.
+
+- **Use Local Lyrics**:
+  - Set `use_local_lyrics = True` in the `main()` function to use lyrics from a `lyrics.txt` file in the script's directory.
+  - If `lyrics.txt` is not found, it falls back to transcribed lyrics.
+  - This takes priority over Genius fetching if both are enabled.
 
 - **Genius URL**:
   - The script is hardcoded to fetch lyrics from a specific Genius URL.

@@ -29,7 +29,7 @@ def extract_pitch(audio_path, sr=22050):
     f0, voiced_flag, voiced_probs = librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), hop_length=hop_length, sr=sr)
     return f0, voiced_flag, sr, hop_length
 
-def generate_ust(lyrics_segments, pitch_data, output_path):
+def generate_ust(lyrics_segments, pitch_data, output_path, audio_duration):
     f0, voiced_flag, sr, hop_length = pitch_data
     tempo = 120  # Default tempo
     # Sort segments by start time
@@ -58,6 +58,16 @@ Mode2=True
             segment['end'] -= first_start
     else:
         first_start = 0
+
+    # Calculate total segments duration and scale factor to match audio duration
+    total_segments_duration = lyrics_segments[-1]['end'] if lyrics_segments else 0
+    scale_factor = audio_duration / total_segments_duration if total_segments_duration > 0 else 1
+    print(f"Audio duration: {audio_duration:.2f}s, Segments duration: {total_segments_duration:.2f}s, Scale factor: {scale_factor:.2f}")
+
+    # Apply scale factor to segment times to match audio duration
+    for segment in lyrics_segments:
+        segment['start'] *= scale_factor
+        segment['end'] *= scale_factor
 
     note_index = 0
     previous_end = 0.0
@@ -91,8 +101,8 @@ Mode2=True
         length = int(duration * ticks_per_second)
 
         # Calculate average pitch
-        start_frame = int((start_time + first_start) * sr / hop_length)
-        end_frame = int((end_time + first_start) * sr / hop_length)
+        start_frame = int(start_time * sr / hop_length)
+        end_frame = int(end_time * sr / hop_length)
         if start_frame < len(f0) and end_frame <= len(f0):
             segment_f0 = f0[start_frame:end_frame]
             valid_f0 = segment_f0[voiced_flag[start_frame:end_frame]]
@@ -114,19 +124,104 @@ Mode2=True
         ust_content += f"NoteNum={note_num}\n"
         ust_content += "PreUtterance=\n"
         ust_content += "VoiceOverlap=\n"
+        ust_content += "Velocity=100\n"
         ust_content += "Intensity=100\n"
         ust_content += "Modulation=0\n"
-        ust_content += "Velocity=100\n"
-        ust_content += "Flags=\n"
+        ust_content += "Flags=g0B0H0P86\n"
+        ust_content += "PBS=-40;0\n"
+        ust_content += "PBW=80\n"
+        ust_content += "PBY=0\n"
+        ust_content += "PBM=\n"
+        ust_content += "VBR=75,175,25,10,10,0,0\n"
         note_index += 1
         previous_end = end_time
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(ust_content)
 
+    # Validate and adjust the generated UST if issues are noticed
+    validate_and_adjust_ust(output_path, audio_duration)
+
+def validate_and_adjust_ust(ust_path, audio_duration):
+    """
+    Double-check the generated UST file for timing and note length issues.
+    Adjust if necessary to match the audio duration.
+    """
+    with open(ust_path, 'r', encoding='utf-8') as f:
+        ust_content = f.read()
+
+    lines = ust_content.split('\n')
+    tempo = 120.0  # Default, but should parse from UST
+    for line in lines:
+        if line.startswith('Tempo='):
+            tempo = float(line.split('=')[1])
+            break
+
+    ticks_per_second = 480 * tempo / 60
+
+    total_ticks = 0
+    note_lengths = []
+    note_indices = []
+    current_note = None
+    for i, line in enumerate(lines):
+        if line.startswith('[#') and line.endswith(']'):
+            if current_note is not None:
+                note_lengths.append(current_note)
+                note_indices.append(i - 1)  # Length line is before the note
+            current_note = {'index': i, 'length': 0, 'lyric': ''}
+        elif line.startswith('Length='):
+            if current_note:
+                current_note['length'] = int(line.split('=')[1])
+                total_ticks += current_note['length']
+        elif line.startswith('Lyric='):
+            if current_note:
+                current_note['lyric'] = line.split('=')[1]
+
+    if current_note:
+        note_lengths.append(current_note)
+
+    ust_duration = total_ticks / ticks_per_second
+    print(f"UST total duration: {ust_duration:.2f}s, Audio duration: {audio_duration:.2f}s")
+
+    if abs(ust_duration - audio_duration) > 0.1:  # Allow 0.1s tolerance
+        print("Timing mismatch detected. Adjusting note lengths to match audio duration.")
+        scale_factor = audio_duration / ust_duration
+        if scale_factor > 1.5 or scale_factor < 0.5:
+            print(f"Warning: Large scale factor ({scale_factor:.2f}) indicates potential transcription issues.")
+        adjusted_content = ust_content
+        for note in note_lengths:
+            old_length = note['length']
+            new_length = max(1, int(old_length * scale_factor))  # Ensure minimum length
+            # Find the Length line for this note
+            for j in range(note['index'], len(lines)):
+                if lines[j].startswith('Length='):
+                    adjusted_content = adjusted_content.replace(f"Length={old_length}", f"Length={new_length}", 1)
+                    break
+
+        with open(ust_path, 'w', encoding='utf-8') as f:
+            f.write(adjusted_content)
+        print("UST file adjusted for timing.")
+    else:
+        print("Timing check passed.")
+
+    # Check for excessively long notes
+    max_note_length_seconds = 10.0  # Arbitrary threshold
+    for note in note_lengths:
+        length_seconds = note['length'] / ticks_per_second
+        if length_seconds > max_note_length_seconds:
+            print(f"Warning: Note '{note['lyric']}' at index {note['index']} is {length_seconds:.2f}s long, which may be too long.")
+
+    # Additional check: Ensure no negative gaps or overlaps (though rests handle gaps)
+    cumulative_ticks = 0
+    for note in note_lengths:
+        cumulative_ticks += note['length']
+    # This is already checked by total_ticks, but we can add more granular checks if needed
+
 def main():
     # Set to False to disable Genius lyric fetching and or you u justn wanna mess with this for fun <3
-    use_genius = True
+    use_genius = False
+    # Set to True to use local lyrics from lyrics.txt instead of transcribed or Genius
+    use_local_lyrics = False
 
     # Look for vocals.wav in the script's directory
     script_dir = Path(__file__).parent
@@ -137,13 +232,23 @@ def main():
     print(f"Exists: {audio_path.exists()}")
 
     if not audio_path.exists():
-        print(f"Audio file {audio_file} not found.")
+        print(f"Audio file {audio_path} not found.")
         return
 
     correct_words = []
-    if use_genius:
+    if use_local_lyrics:
+        print("Using local lyrics from lyrics.txt...")
+        lyrics_file = script_dir / "lyrics.txt"
+        if lyrics_file.exists():
+            with open(lyrics_file, 'r', encoding='utf-8') as f:
+                lyrics_text = f.read()
+            correct_words = [word.strip() for word in lyrics_text.split() if word.strip()]
+            print(f"Loaded {len(correct_words)} words from lyrics.txt.")
+        else:
+            print("lyrics.txt not found. Using transcribed lyrics.")
+    elif use_genius:
         print("Fetching lyrics from Genius...")
-        genius_url = "https://genius.com/Three-days-grace-animal-i-have-become-lyrics"
+        genius_url = "https://genius.com/Mili-jpn-worldexecuteme-lyrics"
         correct_lyrics = fetch_lyrics_from_genius(genius_url)
         if correct_lyrics:
             correct_words = [word.strip() for word in correct_lyrics.split() if word.strip()]
@@ -151,7 +256,7 @@ def main():
         else:
             print("Failed to fetch lyrics from Genius.")
     else:
-        print("Genius lyric fetching disabled.")
+        print("Using transcribed lyrics.")
 
     print("Transcribing audio...")
     transcription = transcribe_audio(str(audio_path))
@@ -162,8 +267,12 @@ def main():
         else:
             lyrics_segments.append(segment)
 
+    print(f"Transcribed {len(lyrics_segments)} segments.")
+
     # Replace lyrics with correct ones if available
     if correct_words:
+        if len(correct_words) != len(lyrics_segments):
+            print(f"Warning: Number of words in lyrics ({len(correct_words)}) does not match number of transcribed segments ({len(lyrics_segments)}). Timing may be off.")
         for i, segment in enumerate(lyrics_segments):
             if i < len(correct_words):
                 segment['text'] = correct_words[i]
@@ -172,9 +281,13 @@ def main():
     print("Extracting pitch...")
     pitch_data = extract_pitch(str(audio_path))
 
+    # Get audio duration
+    y, sr = librosa.load(str(audio_path), sr=None)
+    audio_duration = len(y) / sr
+
     ust_file = audio_path.parent / (audio_path.stem + ".ust")
     print(f"Generating UST file: {ust_file}")
-    generate_ust(lyrics_segments, pitch_data, str(ust_file))
+    generate_ust(lyrics_segments, pitch_data, str(ust_file), audio_duration)
 
     print("Done! Open the UST file in OpenUTAU and render with DiffSinger.")
 
