@@ -63,40 +63,6 @@ def detect_first_onset(audio_path, sr=22050):
         return onset_frames[0]
     return 0.0
 
-def detect_voiced_segments(audio_path, sr=22050, hop_length=256):
-    """
-    Detect voiced segments in the audio using librosa.
-    Returns list of (start_time, end_time) tuples for voiced segments.
-    """
-    y, sr = librosa.load(audio_path, sr=sr)
-    # Use RMS energy to detect silence
-    rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=hop_length)[0]
-    # Threshold for silence (adjustable)
-    silence_threshold = np.percentile(rms, 25)  # Lower 25% is considered silence
-
-    # Find voiced frames
-    voiced_frames = rms > silence_threshold
-
-    # Convert to time segments
-    voiced_segments = []
-    start_frame = None
-    for i, is_voiced in enumerate(voiced_frames):
-        if is_voiced and start_frame is None:
-            start_frame = i
-        elif not is_voiced and start_frame is not None:
-            end_frame = i
-            start_time = librosa.frames_to_time(start_frame, sr=sr, hop_length=hop_length)
-            end_time = librosa.frames_to_time(end_frame, sr=sr, hop_length=hop_length)
-            voiced_segments.append((start_time, end_time))
-            start_frame = None
-
-    # Handle case where audio ends with voiced segment
-    if start_frame is not None:
-        end_time = librosa.frames_to_time(len(voiced_frames), sr=sr, hop_length=hop_length)
-        voiced_segments.append((start_time, end_time))
-
-    return voiced_segments
-
 
 
 def adjust_ust_duration(ust_path, audio_duration):
@@ -234,12 +200,6 @@ Mode2=True
         duration = end_time - start_time
         length = int(duration * ticks_per_second)
 
-        # Ensure minimum note length for audibility (e.g., 0.1 seconds)
-        min_length_ticks = int(0.1 * ticks_per_second)
-        if length < min_length_ticks:
-            length = min_length_ticks
-            print(f"Extended note '{lyric}' from {int(duration * ticks_per_second)} to {min_length_ticks} ticks for audibility.")
-
         # Use tone from USTX if available, otherwise calculate from pitch
         if 'tone' in segment:
             note_num = segment['tone']
@@ -363,8 +323,6 @@ def main():
     use_genius = False
     # Set to True to use local lyrics from lyrics.txt instead of transcribed or Genius
     use_local_lyrics = False
-    # Set to False to disable silence/sound detection filtering (useful for repeated lyrics)
-    use_silence_detection = True
 
     # Look for vocals.wav in the script's directory
     script_dir = Path(__file__).parent
@@ -437,29 +395,6 @@ def main():
                 lyrics_segments.append(segment)
 
     print(f"Using {len(lyrics_segments)} segments.")
-
-    # Detect voiced segments for silence/sound detection
-    if use_silence_detection:
-        print("Detecting voiced segments for silence/sound detection...")
-        voiced_segments = detect_voiced_segments(str(audio_path))
-        print(f"Detected {len(voiced_segments)} voiced segments.")
-
-        # Filter lyrics segments to only include those within voiced segments
-        filtered_lyrics_segments = []
-        for segment in lyrics_segments:
-            segment_start = segment['start']
-            segment_end = segment['end']
-            # Check if segment overlaps with any voiced segment
-            for voice_start, voice_end in voiced_segments:
-                if segment_start < voice_end and segment_end > voice_start:
-                    # Overlap found, include this segment
-                    filtered_lyrics_segments.append(segment)
-                    break
-
-        print(f"Filtered to {len(filtered_lyrics_segments)} segments within voiced regions.")
-        lyrics_segments = filtered_lyrics_segments
-    else:
-        print("Silence/sound detection disabled. Using all transcribed segments.")
 
     print("Extracting pitch with advanced detection...")
     pitch_data = extract_pitch(str(audio_path))

@@ -234,12 +234,6 @@ Mode2=True
         duration = end_time - start_time
         length = int(duration * ticks_per_second)
 
-        # Ensure minimum note length for audibility (e.g., 0.1 seconds)
-        min_length_ticks = int(0.1 * ticks_per_second)
-        if length < min_length_ticks:
-            length = min_length_ticks
-            print(f"Extended note '{lyric}' from {int(duration * ticks_per_second)} to {min_length_ticks} ticks for audibility.")
-
         # Use tone from USTX if available, otherwise calculate from pitch
         if 'tone' in segment:
             note_num = segment['tone']

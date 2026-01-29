@@ -234,12 +234,6 @@ Mode2=True
         duration = end_time - start_time
         length = int(duration * ticks_per_second)
 
-        # Ensure minimum note length for audibility (e.g., 0.1 seconds)
-        min_length_ticks = int(0.1 * ticks_per_second)
-        if length < min_length_ticks:
-            length = min_length_ticks
-            print(f"Extended note '{lyric}' from {int(duration * ticks_per_second)} to {min_length_ticks} ticks for audibility.")
-
         # Use tone from USTX if available, otherwise calculate from pitch
         if 'tone' in segment:
             note_num = segment['tone']
@@ -363,8 +357,6 @@ def main():
     use_genius = False
     # Set to True to use local lyrics from lyrics.txt instead of transcribed or Genius
     use_local_lyrics = False
-    # Set to False to disable silence/sound detection filtering (useful for repeated lyrics)
-    use_silence_detection = True
 
     # Look for vocals.wav in the script's directory
     script_dir = Path(__file__).parent
@@ -439,27 +431,24 @@ def main():
     print(f"Using {len(lyrics_segments)} segments.")
 
     # Detect voiced segments for silence/sound detection
-    if use_silence_detection:
-        print("Detecting voiced segments for silence/sound detection...")
-        voiced_segments = detect_voiced_segments(str(audio_path))
-        print(f"Detected {len(voiced_segments)} voiced segments.")
+    print("Detecting voiced segments for silence/sound detection...")
+    voiced_segments = detect_voiced_segments(str(audio_path))
+    print(f"Detected {len(voiced_segments)} voiced segments.")
 
-        # Filter lyrics segments to only include those within voiced segments
-        filtered_lyrics_segments = []
-        for segment in lyrics_segments:
-            segment_start = segment['start']
-            segment_end = segment['end']
-            # Check if segment overlaps with any voiced segment
-            for voice_start, voice_end in voiced_segments:
-                if segment_start < voice_end and segment_end > voice_start:
-                    # Overlap found, include this segment
-                    filtered_lyrics_segments.append(segment)
-                    break
+    # Filter lyrics segments to only include those within voiced segments
+    filtered_lyrics_segments = []
+    for segment in lyrics_segments:
+        segment_start = segment['start']
+        segment_end = segment['end']
+        # Check if segment overlaps with any voiced segment
+        for voice_start, voice_end in voiced_segments:
+            if segment_start < voice_end and segment_end > voice_start:
+                # Overlap found, include this segment
+                filtered_lyrics_segments.append(segment)
+                break
 
-        print(f"Filtered to {len(filtered_lyrics_segments)} segments within voiced regions.")
-        lyrics_segments = filtered_lyrics_segments
-    else:
-        print("Silence/sound detection disabled. Using all transcribed segments.")
+    print(f"Filtered to {len(filtered_lyrics_segments)} segments within voiced regions.")
+    lyrics_segments = filtered_lyrics_segments
 
     print("Extracting pitch with advanced detection...")
     pitch_data = extract_pitch(str(audio_path))
