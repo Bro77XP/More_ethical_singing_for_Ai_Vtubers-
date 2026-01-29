@@ -1,5 +1,7 @@
 # DiffSinger UST Generator from Vocals
 
+#Make sure to use the diffsinger Kanpai Hatakikomi for voice conversion (NOT TRAINING) as i am the creator of the voice and i am okay with that
+
 This Python script generates a UST (UTAU Sequence Text) file from a vocal audio file, suitable for use with DiffSinger in OpenUTAU. It transcribes the audio using Whisper, extracts pitch using Librosa, and creates a UST file with lyrics, timing, and pitch data.
 
 ## Features
