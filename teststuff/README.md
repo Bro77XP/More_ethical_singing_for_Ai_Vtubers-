@@ -23,11 +23,12 @@ This Python script generates a UST (UTAU Sequence Text) file from a vocal audio 
   - numpy
   - requests
   - beautifulsoup4
+  - gentle
 
 Install the required libraries using pip:
 
 ```bash
-pip install openai-whisper librosa numpy requests beautifulsoup4
+pip install openai-whisper librosa numpy requests beautifulsoup4 gentle
 #there may be more through such as bs4 for an example
 ```
 

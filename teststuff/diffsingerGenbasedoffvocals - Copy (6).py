@@ -52,90 +52,7 @@ def extract_pitch(audio_path, sr=22050):
     f0, voiced_flag, voiced_probs = librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), hop_length=hop_length, sr=sr)
     return f0, voiced_flag, sr, hop_length
 
-def detect_first_onset(audio_path, sr=22050):
-    y, sr = librosa.load(audio_path, sr=sr)
-    onset_frames = librosa.onset.onset_detect(y=y, sr=sr, units='time')
-    if onset_frames.size > 0:
-        return onset_frames[0]
-    return 0.0
-
-def adjust_ust_duration(ust_path, audio_duration):
-    with open(ust_path, 'r', encoding='utf-8') as f:
-        ust_content = f.read()
-
-    lines = ust_content.split('\n')
-    tempo = 120.0
-    for line in lines:
-        if line.startswith('Tempo='):
-            tempo = float(line.split('=')[1])
-            break
-
-    ticks_per_second = 480 * tempo / 60
-
-    total_ticks = 0
-    note_lengths = []
-    current_note = None
-    for i, line in enumerate(lines):
-        if line.startswith('[#') and line.endswith(']'):
-            if current_note is not None:
-                note_lengths.append(current_note)
-            current_note = {'index': i, 'length': 0}
-        elif line.startswith('Length='):
-            if current_note:
-                current_note['length'] = int(line.split('=')[1])
-                total_ticks += current_note['length']
-
-    if current_note:
-        note_lengths.append(current_note)
-
-    ust_duration = total_ticks / ticks_per_second
-    if abs(ust_duration - audio_duration) > 0.1:
-        scale_factor = audio_duration / ust_duration
-        adjusted_content = ust_content
-        for note in note_lengths:
-            old_length = note['length']
-            new_length = max(1, int(old_length * scale_factor))
-            adjusted_content = adjusted_content.replace(f"Length={old_length}", f"Length={new_length}", 1)
-        with open(ust_path, 'w', encoding='utf-8') as f:
-            f.write(adjusted_content)
-        print(f"Adjusted UST duration from {ust_duration:.2f}s to {audio_duration:.2f}s")
-
-def trim_long_notes(ust_path, max_note_seconds=5.0, audio_duration=None):
-    with open(ust_path, 'r', encoding='utf-8') as f:
-        ust_content = f.read()
-
-    lines = ust_content.split('\n')
-    tempo = 120.0
-    for line in lines:
-        if line.startswith('Tempo='):
-            tempo = float(line.split('=')[1])
-            break
-
-    ticks_per_second = 480 * tempo / 60
-    max_ticks = int(max_note_seconds * ticks_per_second)
-    audio_ticks = int(audio_duration * ticks_per_second) if audio_duration else None
-
-    adjusted_content = ust_content
-    cumulative_ticks = 0
-    for i, line in enumerate(lines):
-        if line.startswith('Length='):
-            length = int(line.split('=')[1])
-            if length > max_ticks:
-                adjusted_content = adjusted_content.replace(f"Length={length}", f"Length={max_ticks}", 1)
-                print(f"Trimmed note length from {length} to {max_ticks} ticks")
-                length = max_ticks
-            cumulative_ticks += length
-            if audio_ticks and cumulative_ticks > audio_ticks:
-                excess = cumulative_ticks - audio_ticks
-                new_length = max(1, length - excess)
-                adjusted_content = adjusted_content.replace(f"Length={length}", f"Length={new_length}", 1)
-                print(f"Trimmed final note to fit audio duration: {length} to {new_length} ticks")
-                break
-
-    with open(ust_path, 'w', encoding='utf-8') as f:
-        f.write(adjusted_content)
-
-def generate_ust(lyrics_segments, pitch_data, output_path, audio_duration, from_gentle=False, first_onset=0.0):
+def generate_ust(lyrics_segments, pitch_data, output_path, audio_duration):
     f0, voiced_flag, sr, hop_length = pitch_data
     tempo = 120  # Default tempo
     # Sort segments by start time
@@ -156,35 +73,24 @@ Tool2=resampler.exe
 Mode2=True
 """
 
-    # Shift times to start from the first onset for better alignment with sound
+    # Shift times to start from the first segment
     if lyrics_segments:
-        if from_gentle:
-            # For Gentle, shift to start at first_onset if the first segment is after it
-            first_segment_start = lyrics_segments[0]['start']
-            shift = max(0, first_onset - first_segment_start)
-            for segment in lyrics_segments:
-                segment['start'] += shift
-                segment['end'] += shift
-        else:
-            # For Whisper, shift to start at first_onset
-            first_start = lyrics_segments[0]['start']
-            shift = first_onset - first_start
-            for segment in lyrics_segments:
-                segment['start'] += shift
-                segment['end'] += shift
-
-    if not from_gentle:
-        # Calculate total segments duration and scale factor to match audio duration
-        total_segments_duration = lyrics_segments[-1]['end'] if lyrics_segments else 0
-        scale_factor = audio_duration / total_segments_duration if total_segments_duration > 0 else 1
-        print(f"Audio duration: {audio_duration:.2f}s, Segments duration: {total_segments_duration:.2f}s, Scale factor: {scale_factor:.2f}")
-
-        # Apply scale factor to segment times to match audio duration
+        first_start = lyrics_segments[0]['start']
         for segment in lyrics_segments:
-            segment['start'] *= scale_factor
-            segment['end'] *= scale_factor
+            segment['start'] -= first_start
+            segment['end'] -= first_start
     else:
-        print("Using Gentle-aligned times without scaling.")
+        first_start = 0
+
+    # Calculate total segments duration and scale factor to match audio duration
+    total_segments_duration = lyrics_segments[-1]['end'] if lyrics_segments else 0
+    scale_factor = audio_duration / total_segments_duration if total_segments_duration > 0 else 1
+    print(f"Audio duration: {audio_duration:.2f}s, Segments duration: {total_segments_duration:.2f}s, Scale factor: {scale_factor:.2f}")
+
+    # Apply scale factor to segment times to match audio duration
+    for segment in lyrics_segments:
+        segment['start'] *= scale_factor
+        segment['end'] *= scale_factor
 
     note_index = 0
     previous_end = 0.0
@@ -196,23 +102,22 @@ Mode2=True
         if not lyric:
             continue
 
-        # Insert rest if there's a gap (only for non-Gentle data)
-        if not from_gentle:
-            gap = start_time - previous_end
-            if gap > 0:
-                rest_length = int(gap * ticks_per_second)
-                if rest_length > 0:
-                    ust_content += f"[#{note_index:04d}]\n"
-                    ust_content += f"Length={rest_length}\n"
-                    ust_content += "Lyric=R\n"
-                    ust_content += "NoteNum=60\n"
-                    ust_content += "PreUtterance=\n"
-                    ust_content += "VoiceOverlap=\n"
-                    ust_content += "Intensity=100\n"
-                    ust_content += "Modulation=0\n"
-                    ust_content += "Velocity=100\n"
-                    ust_content += "Flags=\n"
-                    note_index += 1
+        # Insert rest if there's a gap
+        gap = start_time - previous_end
+        if gap > 0:
+            rest_length = int(gap * ticks_per_second)
+            if rest_length > 0:
+                ust_content += f"[#{note_index:04d}]\n"
+                ust_content += f"Length={rest_length}\n"
+                ust_content += "Lyric=R\n"
+                ust_content += "NoteNum=60\n"
+                ust_content += "PreUtterance=\n"
+                ust_content += "VoiceOverlap=\n"
+                ust_content += "Intensity=100\n"
+                ust_content += "Modulation=0\n"
+                ust_content += "Velocity=100\n"
+                ust_content += "Flags=\n"
+                note_index += 1
 
         # Calculate length for the lyric note
         duration = end_time - start_time
@@ -257,14 +162,8 @@ Mode2=True
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(ust_content)
 
-    # Minimal adjustment for total duration mismatch (even with Gentle)
-    adjust_ust_duration(output_path, audio_duration)
-
-    # Trim excessively long notes
-    trim_long_notes(output_path, max_note_seconds=5.0, audio_duration=audio_duration)
-
-    # Final adjustment to ensure total duration matches exactly
-    adjust_ust_duration(output_path, audio_duration)
+    # Validate and adjust the generated UST if issues are noticed
+    validate_and_adjust_ust(output_path, audio_duration)
 
 def validate_and_adjust_ust(ust_path, audio_duration):
     """
@@ -425,14 +324,9 @@ def main():
     y, sr = librosa.load(str(audio_path), sr=None)
     audio_duration = len(y) / sr
 
-    # Detect first onset for timing alignment
-    first_onset = detect_first_onset(str(audio_path))
-    print(f"First onset detected at {first_onset:.2f}s")
-
     ust_file = audio_path.parent / (audio_path.stem + ".ust")
     print(f"Generating UST file: {ust_file}")
-    from_gentle = bool(aligned_words) if 'aligned_words' in locals() else False
-    generate_ust(lyrics_segments, pitch_data, str(ust_file), audio_duration, from_gentle=from_gentle, first_onset=first_onset)
+    generate_ust(lyrics_segments, pitch_data, str(ust_file), audio_duration)
 
     print("Done! Open the UST file in OpenUTAU and render with DiffSinger.")
 
