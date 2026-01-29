@@ -128,8 +128,9 @@ def main():
     # Set to False to disable Genius lyric fetching and or you u justn wanna mess with this for fun <3
     use_genius = True
 
-    audio_file = r"C:\Users\....\Downloads\teststuff\vocals.wav" #add your file path to vocals wav for the thing you want to convert
-    audio_path = Path(audio_file)
+    # Look for vocals.wav in the script's directory
+    script_dir = Path(__file__).parent
+    audio_path = script_dir / "vocals.wav"
 
     print(f"Current directory: {Path.cwd()}")
     print(f"Looking for: {audio_path}")
