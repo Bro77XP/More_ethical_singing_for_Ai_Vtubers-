@@ -362,7 +362,7 @@ def main():
     # Set to False to disable Genius lyric fetching and or you u justn wanna mess with this for fun <3
     use_genius = False
     # Set to True to use local lyrics from lyrics.txt instead of transcribed or Genius
-    use_local_lyrics = False
+    use_local_lyrics = True
     # Set to False to disable silence/sound detection filtering (useful for repeated lyrics)
     use_silence_detection = True
 
