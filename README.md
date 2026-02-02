@@ -1,88 +1,106 @@
-# DiffSinger UST Generator from Vocals
+# Vocal to UST Generator
 
-#Make sure to use the diffsinger Kanpai Hatakikomi for voice conversion (NOT TRAINING) as i am the creator of the voice and i am okay with that
--for refernce What i mean by training is like training a model on my voice (ya know epoch stuff) which again i am not okay 
-with but rvc Voice conversion with a model that you already have is okay and or got consent from or you are the creator of.
-
-This Python script generates a UST (UTAU Sequence Text) file from a vocal audio file, suitable for use with DiffSinger in OpenUTAU. It transcribes the audio using Whisper, extracts pitch using Librosa, and creates a UST file with lyrics, timing, and pitch data.
+This Python script (`vocaltoust.py`) generates a UST (UTAU Sequence Text) file from a vocal audio file (wav/mp3), suitable for use with DiffSinger in OpenUTAU. It transcribes the audio using Whisper, optionally aligns lyrics with Gentle, extracts pitch using Librosa, detects voiced regions, and creates a UST file with rests, notes, velocities, and flags tuned for DiffSinger.
 
 ## Features
 
-- **Audio Transcription**: Uses OpenAI Whisper to transcribe lyrics from the audio.
-- **Pitch Extraction**: Extracts fundamental frequency (pitch) from the audio.
-- **UST Generation**: Creates a UST file compatible with OpenUTAU and DiffSinger.
-- **Pitch Constrained**: Pitch is constrained to the range F#3 (54) to A#4 (70) for vocal suitability.
-- **Timing Corrections**: Improved timing to avoid long initial silences and ensure accurate note lengths.
-- **Long Note Support**: Supports long notes in OpenUTAU via adjustable Length fields.
-- **Optional Lyric Fetching**: Can fetch accurate lyrics from Genius.com to replace transcribed lyrics.
-- **Disablable Genius Fetching**: Lyric fetching from Genius can be disabled by setting `use_genius = False`.
+- **Whisper Transcription**: Uses OpenAI Whisper for audio transcription with word-level timestamps.
+- **Optional Gentle Alignment**: If lyrics are provided (local file or Genius URL), uses Gentle for forced alignment; falls back to Whisper segments.
+- **Pitch Extraction**: Uses Librosa pyin for pitch detection with NaN interpolation and smoothing.
+- **Voice Activity Detection**: Filters micro rests and detects voiced regions using RMS-based VAD.
+- **UST Generation**: Creates UST files with rests, notes, velocities, and DiffSinger-optimized flags.
+- **Duration Matching**: Ensures the UST is at least as long as the audio by extending the last note.
+- **Flexible Input**: Supports local lyrics files or Genius URLs for lyrics.
 
 ## Requirements
 
 - Python 3.7+
 - Libraries:
-  - whisper
+  - openai-whisper
   - librosa
   - numpy
+  - pandas
+  - gentle (optional, for forced alignment)
   - requests
   - beautifulsoup4
 
 Install the required libraries using pip:
 
 ```bash
-pip install openai-whisper librosa numpy requests beautifulsoup4
-#there may be more through such as bs4 for an example
+pip install openai-whisper librosa numpy pandas gentle requests beautifulsoup4
 ```
 
 ## Usage
 
-1. **Prepare the Audio File**:
-   - Rename your vocal audio file to `vocals.wav`.
-   - Place `vocals.wav` in the same directory as the script (`diffsingerGenbasedoffvocals.py`and make sure to keep both in the same folder).
+Run the script from the command line with the following options:
 
-2. **Run the Script**:
-   - Open a terminal or command prompt.
-   - Navigate to the directory containing the script.
-   - Run the script:
+```bash
+python vocaltoust.py --audio <audio_file> [--lyrics <lyrics_source>] [--no-gentle] [--model <whisper_model>] [--out <output_ust>]
+```
 
-     ```bash
-     python diffsingerGenbasedoffvocals.py
-     ```
+### Options
 
-3. **Output**:
-   - The script will generate `vocals.ust` in the same directory.
-   - Open `vocals.ust` in OpenUTAU and render with DiffSinger.
+- `--audio <audio_file>`: Path to the vocal audio file (wav/mp3). Required.
+- `--lyrics <lyrics_source>`: Path to a local lyrics.txt file or a Genius URL for forced alignment. Optional.
+- `--no-gentle`: Disable Gentle forced alignment and use Whisper only. Optional.
+- `--model <whisper_model>`: Whisper model name (tiny, base, small, medium, large). Default: base. Optional.
+- `--out <output_ust>`: Output UST file path. Defaults to `<audio_file>.ust`. Optional.
 
-## Configuration
+### Examples
 
-- **Disable Genius Lyric Fetching**:
-  - In the script, change `use_genius = True` to `use_genius = False` in the `main()` function.
-  - This will skip fetching lyrics from Genius.com and use only the transcribed lyrics.
+1. **Basic usage with audio file**:
+   ```bash
+   python vocaltoust.py --audio vocals.wav
+   ```
 
-- **Genius URL**:
-  - The script is hardcoded to fetch lyrics from a specific Genius URL.
-  - To use a different song, modify the `genius_url` variable in the `main()` function.
+2. **With local lyrics**:
+   ```bash
+   python vocaltoust.py --audio vocals.wav --lyrics lyrics.txt
+   ```
+
+3. **With Genius URL**:
+   ```bash
+   python vocaltoust.py --audio vocals.wav --lyrics "https://genius.com/Artist-Song-lyrics"
+   ```
+
+4. **Custom output and model**:
+   ```bash
+   python vocaltoust.py --audio vocals.wav --lyrics lyrics.txt --model small --out output.ust
+   ```
+
+5. **Disable Gentle**:
+   ```bash
+   python vocaltoust.py --audio vocals.wav --lyrics lyrics.txt --no-gentle
+   ```
+
+### Output
+
+- The script generates a `.ust` file (default: `<audio_file>.ust`) compatible with OpenUTAU and DiffSinger.
+- Open the UST in OpenUTAU to render with DiffSinger.
 
 ## How It Works
 
-1. **Transcription**: The script uses Whisper to transcribe the audio and extract word-level timestamps.
-2. **Pitch Extraction**: Librosa extracts the pitch (fundamental frequency) from the audio.
-3. **Lyric Correction (Optional)**: If enabled, fetches lyrics from Genius.com and replaces transcribed words with accurate lyrics.
-4. **UST Generation**: Combines transcription, pitch, and timing data into a UST file format.
-   - Notes are created for each word with appropriate length, lyric, and pitch.
-   - Pitch is constrained to a vocal range.
-   - Timing is adjusted to start from the first lyric and avoid excessive silences.
-   - this allows for A quick way to save time although this is still being worked on as it is a v1
-   - mainly for ai Vtuber for karokes and saving time and making the system for singing more ethical instead of using rvc which is way less ethical
+1. **Transcription**: Transcribes audio using Whisper with word timestamps.
+2. **Alignment**: If lyrics provided, attempts Gentle forced alignment; otherwise uses Whisper segments.
+3. **Filtering**: Applies VAD to filter segments to voiced regions.
+4. **Pitch Extraction**: Extracts pitch using Librosa pyin with smoothing.
+5. **UST Creation**: Generates UST with notes, rests, pitch, and flags.
+6. **Validation**: Scales and extends UST to match audio duration.
 
 ## Troubleshooting
 
-- **Audio File Not Found**: Ensure the file is named `vocals.wav` and is in the script's directory.
-- **Library Errors**: Ensure all required libraries are installed.
-- **Genius Fetching Fails**: Check internet connection or disable Genius fetching.
-- **UST File Issues**: Open the generated UST in OpenUTAU to verify.
-- Please use the voice bank provided for rvc Conversion as you may deal with legal issues with other virtual singers
+- **Audio File Not Found**: Ensure the path to `--audio` is correct and the file exists.
+- **Library Errors**: Install all required libraries.
+- **Gentle Alignment Fails**: Falls back to Whisper; check Gentle installation.
+- **UST Issues**: Verify in OpenUTAU; ensure audio is vocal-only.
+- **Path Issues**: Use absolute paths if relative paths fail.
 
 ## License
 
 This script is provided as-is for educational and personal use.
+
+
+to run expermental do:
+ python vocaltoust.py --audio "C:\Users\...\Downloads\More_ethical_singing_for_Ai_Vtubers--Lyricgen\More_ethical_singing_for_Ai_Vtubers--Lyricgen\teststuff\vocals.wav" --lyrics "C:\Users\...\Downloads\More_ethical_singing_for_Ai_Vtubers--Lyricgen\More_ethical_singing_for_Ai_Vtubers--Lyricgen\teststuff\lyrics.txt" --output "output.ust"
+
+ you may have to change ... to the user path of what
