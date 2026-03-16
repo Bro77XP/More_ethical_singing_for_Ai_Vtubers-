@@ -104,3 +104,7 @@ to run expermental do:
  python vocaltoust.py --audio "C:\Users\...\Downloads\More_ethical_singing_for_Ai_Vtubers--Lyricgen\More_ethical_singing_for_Ai_Vtubers--Lyricgen\teststuff\vocals.wav" --lyrics "C:\Users\...\Downloads\More_ethical_singing_for_Ai_Vtubers--Lyricgen\More_ethical_singing_for_Ai_Vtubers--Lyricgen\teststuff\lyrics.txt" --output "output.ust"
 
  you may have to change ... to the user path of what
+
+ -Something like C:\Users\YOUR USER NAME\Downloads\More_ethical_singing_for_Ai_Vtubers--Openutau\teststuff proby
+ you Just would need to replace ... With your actual personal computer username like
+ C:\Users\musiclover1092\Downloads\More_ethical_singing_for_Ai_Vtubers--Openutau\teststuff proby
