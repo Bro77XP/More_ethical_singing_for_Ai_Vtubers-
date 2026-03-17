@@ -97,7 +97,7 @@ python vocaltoust.py --audio <audio_file> [--lyrics <lyrics_source>] [--no-gentl
 
 ## License
 
-This script is provided as-is for educational and personal use.
+This script is provided as-is for educational and personal use Editing and forking for personal use is allowed
 
 
 to run expermental do:
