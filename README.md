@@ -2,6 +2,7 @@
 
 This Python script (`vocaltoust.py`) generates a UST (UTAU Sequence Text) file from a vocal audio file (wav/mp3), suitable for use with DiffSinger in OpenUTAU. It transcribes the audio using Whisper, optionally aligns lyrics with Gentle, extracts pitch using Librosa, detects voiced regions, and creates a UST file with rests, notes, velocities, and flags tuned for DiffSinger.
 
+
 ## Features
 
 - **Whisper Transcription**: Uses OpenAI Whisper for audio transcription with word-level timestamps.
@@ -72,7 +73,8 @@ python vocaltoust.py --audio <audio_file> [--lyrics <lyrics_source>] [--no-gentl
    ```bash
    python vocaltoust.py --audio vocals.wav --lyrics lyrics.txt --no-gentle
    ```
-
+   
+-i also recommend keeping each conversion to 30-secs or around a minutes for a song as any longer and it will become desynced (and make sure to not cut in middle of a word if you do so since whisper does not like that)
 ### Output
 
 - The script generates a `.ust` file (default: `<audio_file>.ust`) compatible with OpenUTAU and DiffSinger.
