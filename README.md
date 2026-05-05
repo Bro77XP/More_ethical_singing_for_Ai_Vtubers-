@@ -24,6 +24,9 @@ This Python script (`vocaltoust.py`) generates a UST (UTAU Sequence Text) file f
   - gentle (optional, for forced alignment)
   - requests
   - beautifulsoup4
+ 
+  - Create a new python -m venv .venv
+  - Then Activate it venv\\Scripts\\activate    
 
 Install the required libraries using pip:
 
